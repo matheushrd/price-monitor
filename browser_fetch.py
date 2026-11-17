@@ -38,8 +38,15 @@ class BrowserFetcher:
         self._pw = sync_playwright().start()
         args = ["--disable-blink-features=AutomationControlled"]
         if sys.platform.startswith("linux"):
-            # proot/Termux não tem sandbox de kernel nem /dev/shm decente
-            args += ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+            # proot/Termux não tem sandbox de kernel nem /dev/shm decente. Além disso o Android mata processos
+            # quando há muitos filhos (e o PostgreSQL do Termux vai junto): poucos processos e pouca memória.
+            args += [
+                "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                "--no-zygote", "--renderer-process-limit=1",
+                "--disable-features=site-per-process,IsolateOrigins,Translate",
+                "--disable-extensions", "--disable-background-networking", "--disable-sync",
+                "--js-flags=--max-old-space-size=256",
+            ]
         opts = dict(
             user_data_dir=str(PROFILE_DIR),
             headless=headless,
@@ -53,6 +60,14 @@ class BrowserFetcher:
             opts["executable_path"] = exe
         self.ctx = self._pw.chromium.launch_persistent_context(**opts)
         self.ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+        if os.environ.get("BLOCK_ASSETS", "1") == "1":
+            # imagens, vídeos e fontes não trazem preço e pesam na memória do celular
+            self.ctx.route(
+                "**/*",
+                lambda route: route.abort()
+                if route.request.resource_type in ("image", "media", "font")
+                else route.continue_(),
+            )
         self.page = self.ctx.pages[0] if self.ctx.pages else self.ctx.new_page()
 
     def get(self, url: str, timeout_ms: int = 60000) -> tuple[int, str]:
