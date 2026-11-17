@@ -1,0 +1,2 @@
+# Navegador real (só no Debian do celular). Instale com: pip install -r requirements-browser.txt
+playwright>=1.45

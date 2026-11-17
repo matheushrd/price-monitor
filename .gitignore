@@ -1,0 +1,10 @@
+.env
+credentials.json
+.venv/
+__pycache__/
+.pytest_cache/
+logs/
+browser-profile/
+debug_*.html
+*.zip
+*.log

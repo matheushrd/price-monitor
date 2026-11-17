@@ -1,0 +1,3 @@
+# Opcional: imita o TLS do Chrome e passa por mais proteções anti-robô das lojas.
+# Se não instalar no seu aparelho, o coletor usa `requests` normalmente.
+curl_cffi>=0.7
