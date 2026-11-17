@@ -10,7 +10,14 @@ import sys
 from pathlib import Path
 
 PROFILE_DIR = Path(__file__).resolve().parent / "browser-profile"
-_CHALLENGE_TITLES = ("verifying", "just a moment", "um momento", "verificando", "attention required", "access denied")
+_CHALLENGE_MARKERS = ("sec-if-cpt", "sec-cpt", "akamai", "verifying your browser", "just a moment",
+                      "um momento", "verificando", "cf-challenge", "captcha", "access denied")
+
+
+def _is_challenge(html: str) -> bool:
+    """Páginas de desafio anti-robô são pequenas e citam o fornecedor da proteção."""
+    low = html.lower()
+    return len(html) < 15000 and any(m in low for m in _CHALLENGE_MARKERS)
 
 
 def _find_browser() -> str | None:
@@ -45,22 +52,34 @@ class BrowserFetcher:
         if exe:
             opts["executable_path"] = exe
         self.ctx = self._pw.chromium.launch_persistent_context(**opts)
+        self.ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         self.page = self.ctx.pages[0] if self.ctx.pages else self.ctx.new_page()
 
     def get(self, url: str, timeout_ms: int = 60000) -> tuple[int, str]:
         resp = self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        # Espera um eventual desafio anti-robô ("Verificando seu navegador...") terminar.
-        for _ in range(15):
-            self.page.wait_for_timeout(1500)
-            title = (self.page.title() or "").lower()
-            if not any(k in title for k in _CHALLENGE_TITLES):
+        # Desafios (Akamai/Cloudflare) rodam alguns segundos e recarregam a página sozinhos.
+        # Espera até 50 s, mexendo o mouse como uma pessoa, e tenta recarregar uma vez no meio.
+        html = ""
+        for i in range(25):
+            self.page.wait_for_timeout(2000)
+            try:
+                self.page.mouse.move(200 + (i * 37) % 700, 200 + (i * 53) % 400, steps=8)
+                html = self.page.content()
+            except Exception:  # a página navegou no meio da leitura
+                continue
+            if not _is_challenge(html):
                 break
+            if i == 12:
+                try:
+                    self.page.reload(wait_until="domcontentloaded", timeout=timeout_ms)
+                except Exception:
+                    pass
         try:
             self.page.wait_for_load_state("networkidle", timeout=10000)
         except Exception:
             pass
         self.page.mouse.wheel(0, 700)  # dispara carregamento "preguiçoso" de preços/avaliações
-        self.page.wait_for_timeout(800)
+        self.page.wait_for_timeout(1200)
         return (resp.status if resp else 0), self.page.content()
 
     def close(self) -> None:

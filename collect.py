@@ -193,6 +193,11 @@ if __name__ == "__main__":
 
             bf = BrowserFetcher(headless=args.headless)
             code, html = bf.get(url)
+            try:
+                bf.page.screenshot(path=f"debug_{args.save_html}.png")
+                print(f"captura de tela -> debug_{args.save_html}.png")
+            except Exception:
+                pass
             bf.close()
         else:
             code, html = fetch(url)
